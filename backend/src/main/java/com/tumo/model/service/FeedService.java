@@ -4,19 +4,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.tumo.model.FeedDto;
-import com.tumo.model.FeedLikeDto;
-import com.tumo.model.ScrapDto;
-
 public interface FeedService {
-	
-	List<FeedDto> readFeed(int boardIdx);
-	
-	List<FeedDto> searchFeedByTitle(String title);
-	
-	List<FeedDto> readComment(int boardIdx);
 
-	List<FeedDto> readHotkey(int boardIdx);
+	List<HashMap<String, Object>> readFeed(Map<String, Object> param);
 
+	List<HashMap<String, Object>> searchFeed(Map<String, Object> param);
+
+	List<Map<Object, Object>> readHotKeyword();
+
+	int readFeedPageCnt(int userIdx);
+
+	List<HashMap<String, Object>> readRecommendedArticles(int boardIdx);
 
 }

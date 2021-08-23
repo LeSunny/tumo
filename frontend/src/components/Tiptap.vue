@@ -4,7 +4,7 @@
    rounded
    id="Tiptap"
   >
-    <div v-if="editor" class="w-100 d-flex justify-content-center align-items-center py-2 bg-white border">
+    <div v-if="editor" class="w-100 d-flex flex-wrap justify-content-center align-items-center py-2 bg-white border">
       <button type="button" @click="editor.chain().focus().toggleBold().run()" :class="{ 'is-active': editor.isActive('bold') }">
         <i class="ri-bold"></i>
       </button>
@@ -17,9 +17,9 @@
       <button type="button" @click="editor.chain().focus().toggleCode().run()" :class="{ 'is-active': editor.isActive('code') }">
         <i class="ri-code-line"></i>
       </button>
-      <button type="button" @click="editor.chain().focus().unsetAllMarks().run()">
+      <!-- <button type="button" @click="editor.chain().focus().unsetAllMarks().run()">
         <i class="ri-format-clear"></i>
-      </button>
+      </button> -->
       <div class="divider"></div>
       <button type="button" @click="editor.chain().focus().toggleHeading({ level: 1 }).run()" :class="{ 'is-active': editor.isActive('heading', { level: 1 }) }">
         <i class="ri-h-1"></i>
@@ -45,7 +45,7 @@
         <i class="ri-arrow-go-forward-line"></i>
       </button>
     </div>
-    <editor-content :editor="editor" class="ms-4"/>
+    <editor-content :editor="editor" class="mx-4"/>
   </v-sheet>
 </template>
 

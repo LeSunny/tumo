@@ -1,65 +1,144 @@
 <template>
   <div id="comments">
-    <hr>
-    <div v-for="(data, idx) in commentData" :key="idx">
-      <div class="d-flex align-items-center mb-1">
-        <img src="@/assets/main/user.png" alt="user" style="width: 1em;">
-        <span class="px-2 fw-bold">{{ data.nickName }}</span>
+    <hr class="mt-2">
+    <div v-if="isLoading" v-loading="isLoading" style="height: 50px;"></div>
+    <div v-else>
+      <h5 v-if="!commentData.length" class="text-center">등록된 댓글이 없습니다.</h5>
+      <div v-else>
+        <div v-for="(data, idx) in commentData" :key="idx">
+          <div class="d-flex align-items-center">
+            <img src="@/assets/main/user.png" alt="user" style="width: 1em;">
+            <span class="px-2 fw-bold">{{ data.nickname }}</span>
+            <span class="me-2" style="font-size: 0.75rem;">{{ data.updateAt.substring(0, 16) }}</span>
+            <el-popconfirm
+              v-if="data.userIdx === $store.state.user_info.id"
+              @confirm="deleteComment(data.commentIdx)"
+              confirm-button-type='danger'
+              cancel-button-type='primary'
+              confirm-button-text='삭제'
+              cancel-button-text='취소'
+              icon="el-icon-warning"
+              icon-color="red"
+              title="댓글을 삭제하시겠습니까?"
+            >
+              <v-btn x-small icon slot="reference"><v-icon color="secondary">mdi-close-circle-outline</v-icon></v-btn>
+            </el-popconfirm>
+          </div>
+          <p style="font-size: 0.9rem;">{{ data.content }}</p>
+        </div>
+        <v-pagination
+          v-model="pageNum"
+          :length="pageCnt"
+          @input="getComments"
+          color="#00BFFE"
+          prev-icon="mdi-menu-left"
+          next-icon="mdi-menu-right"
+        ></v-pagination>
       </div>
-      <p>{{ data.content }}</p>
+      <hr>
+      <!-- createComment Form -->
+      <form class="d-flex w-100">
+        <v-icon>mdi-chat-processing-outline</v-icon>
+        <input v-model="content" type="text" placeholder="댓글 작성" class="w-100 mx-3">
+        <v-btn color="primary" class="fw-bold" text plain :disabled="!content.trim()" @click="createComment">게시</v-btn>
+      </form>
     </div>
-    <div class="w-100 d-flex justify-content-center">
-      <img src="@/assets/comment/paginator.png" alt="paginator" class="w-75">
-    </div>
-    <hr>
-    <!-- 댓글 작성 폼 -->
-    <form class="d-flex justify-content-between pb-2">
-     <input v-model="comment" type="text" placeholder="댓글 작성" class="w-75">
-     <v-btn color="primary" class="fw-bold" text plain :disabled="!comment.trim()" @click="createComment">게시</v-btn>
-    </form>
   </div>
 </template>
 
 <script>
+import axios from 'axios'
+
 export default {
   name: 'Comments',
   props: {
-    data: {
-      type: Array
+    boardIdx: {
+      type: Number
     }
   },
   data: function () {
     return {
-      commentData: this.data,
-      comment: '',
+      commentData: [],
+      content: '',
+      isLoading: true,
+      pageNum: 1,
+      pageCnt: 1,
     }
   },
   methods: {
+    getComments: function () {
+      axios({
+        method: 'GET',
+        url: `/api/article/comment/${this.boardIdx}/${this.pageNum - 1}`
+      })
+      .then(res => {
+        const commentList = res.data.commentList
+        if (commentList) {
+          this.commentData = commentList
+          this.pageCnt = res.data.totalPageCnt
+        }
+        this.isLoading = false
+      })
+      .catch(err => {
+        console.log(err)
+        this.isLoading = false
+      })
+    },
     createComment: function () {
-      // axios 요청
-      // .then commentData에 push (axios 재요청 X)
-      let data = {
-        "comment_idx": 1,
-        "user_idx": 1,
-        "nickName": "이규빈",
-        "content": this.comment,
+      const data = {
+        boardIdx: this.boardIdx,
+        userIdx: this.$store.state.user_info.id,
+        content: this.content
       }
-      this.commentData.push(data)
-      // alert
-      this.comment = ''
+      axios({
+        method: 'POST',
+        url: '/api/article/comment',
+        data: data
+      })
+      .then(() => {
+        this.$message({
+          message: '댓글이 성공적으로 작성되었습니다.',
+          type: 'success',
+          offset: 70,
+        })
+        this.content = ''
+        this.pageNum = 1
+        this.getComments()
+      })
+    },
+    deleteComment: function (commentIdx) {
+      axios({
+        method: 'DELETE',
+        url: `/api/article/comment/${commentIdx}`
+      })
+      .then(() => {
+        this.$message({
+          message: '댓글이 성공적으로 삭제되었습니다.',
+          type: 'success',
+          offset: 70,
+        })
+        if (this.commentData.length === 1) {
+          if (this.pageNum === 1) {
+            this.commentData.pop()
+          } else {
+            this.pageNum -= 1
+            this.pageCnt -= 1
+            this.getComments()
+          }
+        } else {
+          this.getComments()
+        }
+      })
     }
+  },
+  created: function () {
+    this.getComments()
   }
 }
 </script>
 
 <style>
-#comments {
-  padding-left: 8%;
-  padding-right: 8%;
-}
-
 #comments input:focus {
   outline: none;
 }
-
 </style>

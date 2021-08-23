@@ -9,23 +9,83 @@
 		 values(#{userIdx},#{title},#{content},#{goal})
 	</insert>
 	
-	<select id="readList" parameterType="int" resultType="portfolioDto" >
+	<select id="readList" parameterType="int" resultType="map" >
 		 select * from portfolio where user_idx=#{userIdx}
+	</select>
+	
+	<select id="recentPortfolio" parameterType="int" resultType="int" >
+		 select portfolio_idx from portfolio where user_idx=#{userIdx} order by portfolio_idx desc limit 1;
 	</select>
 	
 	<delete id="deleteList" parameterType="int" >
 		 delete from portfolio where portfolio_idx=#{portfolioIdx}
 	</delete>
 	
-	<insert id="createAsset" parameterType="portfolioDto" >
+	<insert id="createAsset" parameterType="assetDto" >
 		 insert into asset(portfolio_idx,stock_code,quantity,price,goal) 
 		 values(#{portfolioIdx},#{stock_code},#{quantity},#{price},#{goal})
 	</insert>
 	<select id="readAsset" parameterType="int" resultType="map" >
-		 select * from asset where portfolio_idx=#{portfolioIdx}
+		 select a.*,name from asset as a join company as c on a.stock_code = c.code where portfolio_idx=#{portfolioIdx}
 	</select>
 	<delete id="deleteAsset" parameterType="int" >
 		 delete from asset where asset_idx=#{assetIdx}
 	</delete>
 	
+	<select id="readFeedList" parameterType="Map" resultType="Map" >
+		select portfolio.* ,nickname from portfolio join user on portfolio.user_idx= user.user_idx
+		where portfolio.user_idx in(select following_idx from following where following.user_idx=${userIdx})  or portfolio.user_idx=${userIdx} order by portfolio.portfolio_idx desc limit ${pageNum},5
+	</select>
+	
+	<select id="searchPortfolio" parameterType="Map" resultType="Map" >
+		 select p.*,u.nickname,(sum(quantity*cp.price)) as cursum,sum(quantity*a.price) as sum,truncate(sum(quantity*cp.price)/sum(quantity*a.price)*100-100,2)as percent from 
+		asset as a join company_price as cp on stock_code=code join portfolio as p on p.portfolio_idx=a.portfolio_idx join user  as u on p.user_idx=u.user_idx
+  		where  p.title like "%${searchContent}%" or p.content like "%${searchContent}%"  or  u.nickname like "%${searchContent}%" group by p.portfolio_idx order by percent desc limit 10 ; 
+	</select>
+	
+	<select id="readTopPortfolio" resultType="Map" >
+		 select p.*,u.nickname,(sum(quantity*cp.price)) as cursum,sum(quantity*a.price) as sum,truncate(sum(quantity*cp.price)/sum(quantity*a.price)*100-100,2)as percent from 
+		asset as a join company_price as cp on stock_code=code join portfolio as p on p.portfolio_idx=a.portfolio_idx join user  as u on p.user_idx=u.user_idx
+  		group by p.portfolio_idx order by percent desc limit 10 ; 
+	</select>
+	
+	<select id="readRank" parameterType="String" resultType="String" >
+		select u.rank from user as u where u.nickname=#{nickname}
+	</select>
+	
+	<update id="updateList" parameterType="portfolioDto">
+		update portfolio p set p.title=#{title}, p.content=#{content},p.goal=#{goal} where portfolio_idx=#{portfolioIdx}
+	</update>
+	
+	
+	<update id="updateAsset" parameterType="assetDto">
+		update asset a set a.quantity=#{quantity},a.price =#{price},a.goal=#{goal} where a.asset_idx=#{assetIdx}
+	</update>
+	
+	<update id="updateRank">
+		UPDATE user A
+		    SET A.rank = (
+		   SELECT B.ranking 
+		       FROM (
+		                     select rank() over(order by (sum(quantity*cp.price)/sum(quantity*a.price)) desc) as ranking, u.user_idx 
+		                     from asset as a join company_price as cp on stock_code=code join portfolio as p on p.portfolio_idx=a.portfolio_idx
+		                      join user as u on u.user_idx=p.user_idx group by u.user_idx
+		                    )B
+		    WHERE 
+		    A.user_idx= B.user_idx)
+	</update>
+	
+	<update id="updateYield">
+		UPDATE user A
+		    SET A.yield = (
+		   SELECT B.yield 
+		       FROM (
+                     select  (sum(quantity*cp.price)/sum(quantity*a.price)) as yield, u.user_idx from 
+                     asset as a join company_price as cp on stock_code=code join portfolio as p on p.portfolio_idx=a.portfolio_idx
+                      join user as u on u.user_idx=p.user_idx group by u.user_idx
+                    )B
+			    WHERE 
+			    A.user_idx= B.user_idx
+			    )
+	</update>
 </mapper>

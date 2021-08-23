@@ -1,9 +1,11 @@
 package com.tumo.model.service;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 import org.apache.ibatis.session.SqlSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.mailjet.client.errors.MailjetException;
+import com.mailjet.client.errors.MailjetSocketTimeoutException;
 import com.tumo.jwt.TokenProvider;
 import com.tumo.model.LoginDto;
 import com.tumo.model.SignupDto;
@@ -47,11 +51,49 @@ public class UserServiceImpl implements UserService {
     
 	@Override
 	@Transactional
+	public void createOauthUser(SignupDto signupDto) throws SQLException {
+
+		UserDto userDto = new UserDto(signupDto.getNickname(), signupDto.getEmail(), signupDto.getOauth());
+		userDto.setLogin_type("ROLE_USER");
+		
+		// DB 테이블 비밀번호 컬럼이 NOT NULL이라서 초기화는 하되 사용은 하지않습니다
+		String encodedPassword = passwordEncoder.encode("google1234");
+		userDto.setPassword(encodedPassword);
+		
+		// 회원정보 insert
+		sqlSession.getMapper(UserDao.class).createOauthUser(userDto);
+
+		// 회원정보 insert 성공시 태그 insert를 위한 user_idx 조회
+		UserDto signupUser = sqlSession.getMapper(UserDao.class).findUserByEmail(userDto.getEmail());
+		Integer userIdx = signupUser.getUserIdx();
+
+		List<String> tagList = signupDto.getTag();
+
+		Map<String, Object> tagMap = new HashMap<String, Object>();
+
+		// 태그 insert
+		for (String content : tagList) {
+			tagMap.clear();
+			tagMap.put("userIdx", userIdx);
+			tagMap.put("content", content);
+
+			// 중복되는 태그 insert 방지를 위한 검사
+			if (sqlSession.getMapper(UserDao.class).findUserTagByUserIdxAndContent(tagMap)) {
+				continue;
+			}
+
+			sqlSession.getMapper(UserDao.class).insertUserTag(tagMap);
+		}
+
+	}
+	
+	@Override
+	@Transactional
 	public void createUser(SignupDto signupDto) throws SQLException {
 
 		UserDto userDto = new UserDto(signupDto.getNickname(), signupDto.getEmail(), signupDto.getPassword(),
 				signupDto.getIntroduce());
-
+		
 		// 회원가입시 비밀번호 암호화 후 DB에 저장
 		String encodedPassword = passwordEncoder.encode(userDto.getPassword());
 		userDto.setPassword(encodedPassword);
@@ -79,6 +121,21 @@ public class UserServiceImpl implements UserService {
 			}
 
 			sqlSession.getMapper(UserDao.class).insertUserTag(tagMap);
+		}
+		
+		// 이메일 인증 코드 생성후 이메일 발송
+		String code = mailUtil.getTempPassword();
+		Map<String, Object> tempMap = new HashMap<String, Object>();
+		tempMap.put("userIdx", userIdx);
+		tempMap.put("code", code);
+		sqlSession.getMapper(UserDao.class).insertUserTemp(tempMap);
+		
+		try {
+			mailUtil.confirmEmail(signupUser.getEmail(), signupUser.getNickname(), userIdx, code);
+		} catch (MailjetException e) {
+			e.printStackTrace();
+		} catch (MailjetSocketTimeoutException e) {
+			e.printStackTrace();
 		}
 
 	}
@@ -112,6 +169,43 @@ public class UserServiceImpl implements UserService {
 	
 	@Transactional
 	@Override
+	public UserDto confirmEmail(int userIdx, String code) {
+		UserDto userDto = sqlSession.getMapper(UserDao.class).findUserByUserIdx(userIdx);
+		String tempCode = sqlSession.getMapper(UserDao.class).findUserTempByUserIdx(userIdx);
+		
+		if ( userDto == null || tempCode == null || !code.equals(tempCode) ) {
+			// 실패사유
+			// 1. 등록된 회원이 아님
+			// 2. 이미 인증 완료된 회원
+			// 3. 입력받은 인증 코드가 틀린 경우
+			return null;
+		}
+		
+		sqlSession.getMapper(UserDao.class).updateUserLoginType(userIdx);
+		
+		return userDto;
+	}
+	
+	@Override
+	public boolean resendConfirmEmail(int userIdx) {
+		UserDto userDto = sqlSession.getMapper(UserDao.class).findUserByUserIdx(userIdx);
+		String code = sqlSession.getMapper(UserDao.class).findUserTempByUserIdx(userIdx);
+		
+		if ( userDto == null || code == null ) {
+			return false;
+		}
+		
+		try {
+			mailUtil.confirmEmail(userDto.getEmail(), userDto.getNickname(), userIdx, code);
+		} catch (MailjetException | MailjetSocketTimeoutException e) {
+			e.printStackTrace();
+		}
+		
+		return true;
+	}
+
+	@Transactional
+	@Override
 	public TokenDto login(LoginDto loginDto) {
 		
 		UsernamePasswordAuthenticationToken authenticationToken =
@@ -133,6 +227,11 @@ public class UserServiceImpl implements UserService {
 		return tokenDto;
 	}
 	
+	@Override
+	public List<String> readUserTag(int userIdx) {
+		return sqlSession.getMapper(UserDao.class).findUserTagByUserIdx(userIdx);
+	}
+
 	@Override
 	public boolean checkPassword(int userIdx, String password) {
 		// 비밀번호 일치하면 true, 불일치하면 false
@@ -170,26 +269,22 @@ public class UserServiceImpl implements UserService {
 	
 	@Transactional
 	@Override
-	public UpdateUserDto updateNickname(int userIdx, String nickname) {
-		UpdateUserDto updateUserDto = new UpdateUserDto();
+	public UserDto updateUser(UpdateUserDto updateUserDto) {
+		// treeSet 이용한 tags 중복 제거
+		TreeSet<String> tagsTreeSet = new TreeSet<String>();
 		
-		if (checkNickname(nickname)) {
-			// 변경하려는 닉네임이 사용 가능한 nickname
-			Map<String, Object> map = new HashMap<String, Object>();
-			map.put("userIdx", userIdx);
-			map.put("nickname", nickname);
-			sqlSession.getMapper(UserDao.class).updateNicknameByUserIdx(map);
-			
-			UserDto userDto = sqlSession.getMapper(UserDao.class).findUserByUserIdx(userIdx);
-			
-			updateUserDto.setSuccess(true);
-			updateUserDto.setUserDto(userDto);
-		} else {
-			// 중복된 닉네임으로 변경 시도
-			updateUserDto.setSuccess(false);
+		for(String tag : updateUserDto.getTags()) {
+			tagsTreeSet.add(tag);
 		}
 		
-		return updateUserDto;
+		List<String> tagList = new ArrayList<String>(tagsTreeSet);
+		updateUserDto.setTags(tagList);
+		
+		sqlSession.getMapper(UserDao.class).updateUserByUserIdx(updateUserDto);
+		
+		// 변경된 회원 정보 반환
+		UserDto userDto = sqlSession.getMapper(UserDao.class).findUserByUserIdx(updateUserDto.getUserIdx());
+		return userDto;
 	}
 
 	@Override
@@ -222,8 +317,6 @@ public class UserServiceImpl implements UserService {
 		try {
 			String status = mailUtil.findPassword(email, userDto.getNickname(), tempPassword);
 			
-			System.out.println(status);
-			
 			if (status.equals("200")) {
 				// 임시 비밀번호 메일 전송 성공
 				result = true;
@@ -233,6 +326,17 @@ public class UserServiceImpl implements UserService {
 		}
 		
 		return result;
+	}
+
+	@Override
+	public UserDto readUserByEmail(String email) {
+		UserDto userDto = sqlSession.getMapper(UserDao.class).findUserByEmail(email);
+		
+		if (userDto == null) {
+			return null;
+		}
+		
+		return userDto;
 	}
 	
 }

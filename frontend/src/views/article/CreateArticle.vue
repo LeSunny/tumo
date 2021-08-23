@@ -1,15 +1,16 @@
 <template>
   <v-dialog
     persistent
-    width="640"
+    width="555"
     v-model="isDrawCreateArticle" 
   >
     <v-card id="createArticle">
-      <h1 class="text-center mb-5"><v-icon large color="black">mdi-pencil</v-icon> 새 게시물</h1>
+      <h1 class="text-center mb-5"><v-icon large color="#00BFFE" class="me-2">mdi-pencil</v-icon> 게시물 작성</h1>
       <v-form
         ref="form"
         v-model="valid"
       >
+        <!-- title -->
         <div class="d-flex flex-column flex-sm-row justify-content-sm-between">
           <div class="w-100">
             <label for="formTitle">제목</label>
@@ -33,30 +34,33 @@
             ></v-select>
           </div>
         </div>
+        <!-- content -->
         <div>
           <label for="content">내용</label>
           <Tiptap v-model="data.content"/>
         </div>
         <br>
+        <!-- tags -->
+        <label for="tags">해쉬 태그</label>
         <div class="d-flex justify-content-between align-items-end">
-          <div class="w-100">
-            <label for="tags">태그</label>
-            <v-text-field
-              dense
-              solo
-              hide-details
-              @keypress.enter="addTag"
-              v-model="inputTag"
-            ></v-text-field>
-          </div>
+          <span>#</span>
+          <v-text-field
+            dense
+            solo
+            hide-details
+            class="w-100 mx-2"
+            v-model="inputTag"
+            @keypress.enter="addTag"
+          ></v-text-field>
           <v-btn color="error" @click="addTag">추가</v-btn>          
         </div>
-        <div>
-          <v-chip v-for="(tag, idx) in data.tags" :key="idx" label close @click:close="popTag(idx)" class="me-3 my-3">#{{ tag }}</v-chip>
+        <div class="mt-2 mb-3">
+          <v-chip v-for="(tag, idx) in data.tags" :key="idx" label close @click:close="popTag(idx)" class="me-3 mt-3">#{{ tag }}</v-chip>
         </div>
+        <!-- Btn Group -->
         <div class="d-flex justify-content-end mt-5">
-          <v-btn class="me-5" color="error" @click="closeModal">작성 취소</v-btn>
-          <v-btn color="primary" :disabled="!valid" @click="submitForm">작성 완료</v-btn>
+          <v-btn @click="closeModal" class="me-5" color="error" >작성 취소</v-btn>
+          <v-btn @click="submitForm" :disabled="!valid" color="primary" >작성 완료</v-btn>
         </div>
       </v-form>
     </v-card>
@@ -64,7 +68,8 @@
 </template>
 
 <script>
-import Tiptap from '../components/Tiptap.vue'
+import axios from 'axios'
+import Tiptap from '@/components/Tiptap.vue'
 
 export default {
   name: 'CreateArticle',
@@ -77,9 +82,10 @@ export default {
       items: ['국내주식', '해외주식', '국내채권', '해외채권'],
       inputTag: '',
       data: {
-        title: '',
+        userIdx: this.$store.state.user_info.id,
+        title: null,
+        content: null,
         stock: '국내주식',
-        content: '',
         tags: [],
       }
     }
@@ -98,9 +104,23 @@ export default {
       this.$store.state.drawCreateArticle = false
     },
     submitForm: function () {
-      // axios 요청
-      // alert
-      this.$store.state.drawCreateArticle = false
+      axios({
+        method: 'POST',
+        url: '/api/article/',
+        data: this.data
+      })
+      .then(() => {
+        this.closeModal()
+        this.$alert("성공적으로 게시물이 작성되었습니다.", "작성 완료", 'success')
+        .then(() => {
+          if (this.$route.name === 'main') {
+            this.$router.go(this.$router.currentRoute)
+          }
+        })
+      })
+      .catch(err => {
+        console.log(err)
+      })
     }
   },
   computed: {
@@ -118,24 +138,20 @@ export default {
         v => !!v || '내용을 적어주세요.',
       ]
     }
-  }
+  },
 }
 </script>
 
 <style>
 #createArticle {
   padding: 5% 7%;
+  font-family: 'Noto Sans KR', sans-serif;
 }
 
 #createArticle h1 {
   font-family: 'Gothic A1', sans-serif;
   font-weight: 800;
-}
-
-#createArticle label, 
-#createArticle span {
-  font-family: 'Nanum Gothic', sans-serif;
-  font-weight: 700;
+  color: #00BFFE;
 }
 
 #createArticle form {

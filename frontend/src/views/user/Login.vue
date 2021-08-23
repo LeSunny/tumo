@@ -8,34 +8,36 @@
         <div class="d-flex flex-column text-center" id="loginForm">
           <v-form ref="form" v-model="valid">
             <v-text-field
-              v-model="credentials.email"
-              :rules="emailRules"
-              type="email"
-              outlined
               dense
+              outlined
               hide-details
+              type="email"
               label="이메일"
               class="mb-4"
+              v-model="credentials.email"
+              :rules="emailRules"
             ></v-text-field>
             <v-text-field
-              v-model="credentials.password"
-              :rules="passwordRules"
-              type="password"
-              outlined
               dense
+              outlined
               hide-details
+              type="password"
               label="비밀번호"
               class="mb-4"
+              v-model="credentials.password"
+              :rules="passwordRules"
             ></v-text-field>
-            <v-btn :disabled="!valid" :loading="isLoading" color="primary" class="w-100" @click="userLogin">로그인</v-btn>
+            <v-btn @click="userLogin" :disabled="!valid" :loading="isLoading" class="w-100" color="primary">로그인</v-btn>
+            <EmailAuth v-if="$store.state.drawEmailAuth" :userIdx="userIdx" :email="credentials.email"/>
           </v-form>
-          <v-alert dense text type="error" id="loginAlert">회원 정보를 다시 확인해 주세요.</v-alert>
-          <router-link :to="{ name: 'Login' }">비밀번호를 잊으셨나요?</router-link>
+          <v-alert v-if="error" dense text type="error" style="font-size: 0.8rem;">회원 정보를 다시 확인해 주세요.</v-alert>
+          <v-alert v-if="isOauthUserError" dense text type="error" style="font-size: 0.8rem;">소셜 로그인으로 가입된 이메일입니다.<br>GOOGLE 로그인을 클릭해주세요.</v-alert>
+          <p @click="drawModal" class="text-primary" style="cursor: pointer;" >비밀번호를 잊으셨나요?</p>
+          <FindPassword v-if="$store.state.drawFindPassword" />
           <p class="my-auto">투모에 처음 오셨나요? <router-link :to="{ name: 'signup' }">가입하기</router-link></p>
           <hr>
-          <v-btn color="error"><img src="@/assets/login/google.png" alt="googleIcon">Google 로그인</v-btn>
-          <v-btn color="success"><img src="@/assets/login/naver.png" alt="naverIcon">Naver 로그인</v-btn>
-          <v-btn color="yellow"><img src="@/assets/login/kakao.png" alt="kakaoIcon">Kakao 로그인</v-btn>
+          <div id="my-signin2"></div><p/>
+          <v-alert v-if="isNotOauthUserError" dense text type="error" style="font-size: 0.8rem;">일반 회원으로 가입된 이메일입니다.<br>일반 로그인 창을 이용해주세요.</v-alert>
         </div>
       </div>
 
@@ -47,7 +49,7 @@
           :interval="3000"
           fade
         >
-          <b-carousel-slide v-for="num in ['1', '2', '3']" :key="num">
+          <b-carousel-slide v-for="num in 7" :key="num">
             <template #img>
               <img
                 class="w-100"
@@ -66,43 +68,56 @@
 
 <script>
 import axios from 'axios'
+import FindPassword from '@/components/account/FindPassword'
+import EmailAuth from '@/components/account/EmailAuth'
 
 export default {
   name: "Login",
-  components: {},
+  components: {
+    FindPassword,
+    EmailAuth,
+  },
   data: function() {
     return {
       valid: true,
+      error: false,
       isLoading: false,
+      userIdx: null,
       credentials: {
         email: "",
         password: "",
       },
+      googleUser: null,
+      isOauthUserError: false,
+      isNotOauthUserError: false,
     };
   },
   methods: {
     userLogin: function () {
+      this.isNotOauthUserError = false;
       this.isLoading = true
       axios({
         method: 'POST',
-        url: '/user/login',
+        url: '/api/user/login',
         data: this.credentials
       })
       .then(res => {
         const message = res.data.message
         if (message === 'fail') {
-          const loginAlert = document.querySelector('.v-alert')
-          loginAlert.setAttribute('style', 'display: unset;')
+          this.error = true
+        } else if (message === 'isOauthUser') {
+          this.isOauthUserError = true;
+        } else if (message === 'temp') {
+          this.userIdx = res.data.userIdx
+          this.$store.state.drawEmailAuth = true
         } else {
           const userData = {
+            ...res.data.userDto,
             'token': res.headers.authorization,
-            'userIdx': res.data.userDto.userIdx,
-            'nickname': res.data.userDto.nickname,
+            'tags': res.data.tags
           }
-          // local Storage에 저장 및 state 변경
           localStorage.setItem('userData', JSON.stringify(userData))
           this.$store.commit('LOGIN', userData)
-          // main으로 이동
           this.$router.push({ name: 'main'})
         }
         this.isLoading = false
@@ -110,7 +125,60 @@ export default {
       .catch(err => {
         console.log(err)
       })
-    }
+    },
+    drawModal: function () {
+      this.$store.state.drawFindPassword = true
+    },
+    onSuccess: function (googleUser) {
+      // eslint-disable-next-line
+      this.isOauthUserError = false;
+      this.googleUser = googleUser.getBasicProfile();
+      const id_token = googleUser.getAuthResponse().id_token;
+      this.oauthLogin(id_token);
+    },
+    onFailure: function (error) {
+      // eslint-disable-next-line
+      console.log(error);
+    },
+    oauthLogout: function () {
+      const authInst = window.gapi.auth2.getAuthInstance();
+      authInst.signOut();
+    },
+    oauthLogin: function (id_token) {
+      const authInst = window.gapi.auth2.getAuthInstance();
+      authInst.signOut();
+      axios({
+        method: 'POST',
+        url: '/api/user/oauth-login',
+        data: id_token
+      })
+      .then(res => {
+        const message = res.data.message
+        if (message === 'isNotOauthUser') {
+          // 일반 회원으로 이미 가입된 이메일
+          this.isNotOauthUserError = true;
+          this.oauthLogout();
+        } else if (message === 'null') {
+          // 가입되지 않은 회원으로 회원 가입 페이지로 이동
+          this.$router.push({ name: "oauthSignup", params: { email: res.data.email } })
+        } else if (message === 'success') {
+          const userData = {
+            ...res.data.userDto,
+            'token': res.headers.authorization,
+            'tags': res.data.tags
+          }
+          localStorage.setItem('userData', JSON.stringify(userData))
+          this.$store.commit('LOGIN', userData)
+          this.$router.push({ name: 'main'})
+        } else {
+          this.error = true
+        }
+      })
+      .catch(err => {
+        console.log(err)
+        this.oauthLogout();
+      })
+    },
   },
   computed: {
     emailRules: function () {
@@ -119,29 +187,25 @@ export default {
     passwordRules: function () {
       return [(v) => !!v]
     }
+  },
+  mounted: function () {
+    if (this.$store.state.config.Authorization) {
+      this.$router.push({ name: 'main' })
+    }
+    window.gapi.signin2.render('my-signin2', {
+      scope: 'profile email',
+      width: 260,
+      height: 50,
+      longtitle: true,
+      theme: 'dark',
+      onsuccess: this.onSuccess,
+      onfailure: this.onFailure,
+    });
   }
 };
 </script>
 
 <style>
-@media screen and (max-width: 768px){
-  #loginImage {
-    display: none;
-  }
-}
-
-@media screen and (min-width: 768px){  
-  #loginImage {
-    margin-left: 9%;
-    width: 260px;
-    position: relative;
-  }
-
-  #carousel img {
-    height: 393px;
-  }
-}
-
 #login h2 {
   font-family: 'Jua', sans-serif;
   margin-bottom: 0;
@@ -163,10 +227,7 @@ export default {
 }
 
 #loginForm {
-  padding-left: 3rem;
-  padding-right: 3rem;
-  padding-top: 2rem;
-  padding-bottom: 1.5rem;
+  padding: 2rem 3rem 1.5rem;
   width: 100%;
 }
 
@@ -176,10 +237,10 @@ export default {
 }
 
 #carousel {
-  width: 84.5%;
+  width: 85%;
   margin-left: 9.5%;
   position: absolute;
-  top: 11.7%;
+  top: 11.5%;
 }
 
 #carousel img {
@@ -194,9 +255,21 @@ export default {
   z-index: 1;
 }
 
-#loginAlert {
-  font-size: 0.8rem;
-  display: none;
+@media screen and (max-width: 768px){
+  #loginImage {
+    display: none;
+  }
 }
 
+@media screen and (min-width: 768px){  
+  #loginImage {
+    margin-left: 9%;
+    width: 260px;
+    position: relative;
+  }
+
+  #carousel img {
+    height: 393px;
+  }
+}
 </style>

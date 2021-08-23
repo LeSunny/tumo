@@ -4,10 +4,27 @@
 
 <mapper namespace="com.tumo.model.dao.CompanyDao">
 
-	<select id="searchCompany" parameterType="Map" resultType="map">
+	<select id="searchCompany" parameterType="map" resultType="map">
+		select * from company where name like "%${searchContent}%" or code like "%${searchContent}%" or industry like
+		 "%${searchContent}%" limit 5
+	</select>
+	
+	<select id="searchCompanyForeign" parameterType="map" resultType="map">
+		select * from company_foreign where name like "%${searchContent}%" or symbol like "%${searchContent}%" or industry like
+		 "%${searchContent}%" limit 5
+	</select>
+	
+	<select id="readFeedCompany" parameterType="Map" resultType="map">
 		select * from company where name like "%${keyword}%" or industry like
 		 "%${keyword}%" limit ${pageNum},5
 	</select>
 	
+	<select id="readCorp" parameterType="string" resultType="string">
+		 select corp_code from dart where stock_code= cast( (select code from company where name=#{corp_name} )as unsigned )
+	</select>
 	
+	
+	<select id="readStock" parameterType="string" resultType="string">
+		 select  code from company where name=#{corp_name}
+	</select>
 </mapper>

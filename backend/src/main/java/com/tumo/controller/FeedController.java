@@ -12,19 +12,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tumo.model.FeedDto;
-import com.tumo.model.ScrapDto;
 import com.tumo.model.service.FeedService;
 
 import io.swagger.annotations.ApiOperation;
 
 @RestController
-@RequestMapping("/feed")
+@RequestMapping("/api/feed")
 @CrossOrigin("*")
 public class FeedController {
 
@@ -35,52 +32,65 @@ public class FeedController {
 	private FeedService feedService;
 
 	@ApiOperation(value = "게시글 리스트 조회")
-	@GetMapping("/search")
-	public ResponseEntity<Map<String, Object>> readFeed(@PathVariable int userIdx) {
-		Map<String, Object> map = new HashMap<String, Object>();
-		List<FeedDto> feedList = feedService.readFeed(userIdx);
+	@GetMapping("/{userIdx}/{pageNum}")
+	public ResponseEntity<Map<String, Object>> readFeed(@PathVariable int userIdx, @PathVariable int pageNum) {
+		Map<String, Object> result = new HashMap<String, Object>();
+		Map<String, Object> param = new HashMap<String, Object>();
+		param.put("userIdx", userIdx);
+		param.put("pageNum", pageNum * 10);
+
+		List<HashMap<String, Object>> feedList = feedService.readFeed(param);
+		int totalPageCnt = feedService.readFeedPageCnt(userIdx);
+		
 		if (feedList == null || feedList.size() == 0) {
-			map.put("message", FAIL);
-			return new ResponseEntity<Map<String, Object>>(map, HttpStatus.NO_CONTENT);
+			result.put("message", FAIL);
+			return new ResponseEntity<Map<String, Object>>(result, HttpStatus.NO_CONTENT);
 		}
-		map.put("feedList", feedList);
-		map.put("message", SUCCESS);
-		return new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+
+		result.put("message", SUCCESS);
+		result.put("feedList", feedList);
+		result.put("totalPageCnt", totalPageCnt);
+
+		return new ResponseEntity<Map<String, Object>>(result, HttpStatus.OK);
 	}
 
 	@ApiOperation(value = "피드 검색")
 	@GetMapping("/search/{searchContent}/{pageNum}")
-	public ResponseEntity<Map<String, Object>> searchFeed(@PathVariable String title) {
-		Map<String, Object> map = new HashMap<String, Object>();
-		List<FeedDto> feedList = feedService.searchFeedByTitle(title);
+	public ResponseEntity<Map<String, Object>> searchFeed(@PathVariable String searchContent, @PathVariable int pageNum) {
+		Map<String, Object> result = new HashMap<String, Object>();
+		Map<String, Object> param = new HashMap<String, Object>();
+		param.put("searchContent", searchContent);
+		param.put("pageNum", pageNum * 5);
+		
+		List<HashMap<String, Object>> feedList = feedService.searchFeed(param);
+		result.put("feedList", feedList);
+		result.put("message", SUCCESS);
+		return new ResponseEntity<Map<String, Object>>(result, HttpStatus.OK);
+	}
+	
+	@ApiOperation(value = "유사한 게시글", notes="태그를 바탕으로 유사 게시글 추천")
+	@GetMapping("/{boardIdx}")
+	public ResponseEntity<Map<String, Object>> readRecommendedArticles(@PathVariable int boardIdx) {
+		Map<String, Object> result = new HashMap<String, Object>();
+
+		List<HashMap<String, Object>> feedList = feedService.readRecommendedArticles(boardIdx);
+		
 		if (feedList == null || feedList.size() == 0) {
-			map.put("message", FAIL);
-			return new ResponseEntity<Map<String, Object>>(map, HttpStatus.NO_CONTENT);
+			result.put("message", FAIL);
+			return new ResponseEntity<Map<String, Object>>(result, HttpStatus.NO_CONTENT);
 		}
-		map.put("feedList", feedList);
-		map.put("message", SUCCESS);
-		return new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+
+		result.put("message", SUCCESS);
+		result.put("feedList", feedList);
+
+		return new ResponseEntity<Map<String, Object>>(result, HttpStatus.OK);
 	}
-	
-	@ApiOperation(value = "댓글 조회")
-	@GetMapping("/comment/{board_idx}")
-	public ResponseEntity<Map<String, Object>> readComment(@PathVariable int boardIdx) {
-		Map<String, Object> map = new HashMap<String, Object>();
-		List<FeedDto> commentList = feedService.readComment(boardIdx);
-		if (commentList == null || commentList.size() == 0) {
-			map.put("message", FAIL);
-			return new ResponseEntity<Map<String, Object>>(map, HttpStatus.NO_CONTENT);
-		}
-		map.put("commentList", commentList);
-		map.put("message", SUCCESS);
-		return new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-	}
-	
+
 	@ApiOperation(value = "인기 키워드")
 	@GetMapping("/hotkeyword")
-	public ResponseEntity<Map<String, Object>> readHotkey(@PathVariable int boardIdx) {
+	public ResponseEntity<Map<String, Object>> readHotkey() {
 		Map<String, Object> map = new HashMap<String, Object>();
-		List<FeedDto> hotkeyList = feedService.readHotkey(boardIdx);
+		List<Map<Object, Object>> hotkeyList = feedService.readHotKeyword();
 		if (hotkeyList == null || hotkeyList.size() == 0) {
 			map.put("message", FAIL);
 			return new ResponseEntity<Map<String, Object>>(map, HttpStatus.NO_CONTENT);

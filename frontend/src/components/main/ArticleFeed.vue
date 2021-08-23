@@ -1,41 +1,53 @@
 <template>
   <v-sheet 
-    elevation="4"
+    :elevation="elevation"
     rounded
-    class="mx-2 my-5"
-    height="auto"
-    width="auto"
-    id="articleFeed">
+    class="articleFeed mx-2 my-5"
+    @mouseover="elevation=10"
+    @mouseleave="elevation=4"
+  >
     <div class="d-flex justify-content-between mb-3">
       <div class="d-flex align-items-center">
-        <img src="@/assets/main/user.png" alt="user" style="width: 35px;">
-        <div class="d-flex align-items-center">
-          <h6 class="my-0 mx-3">{{ data.title }}</h6>
-          <p class="my-0 text-secondary">@nickName</p>
+        <img src="@/assets/main/user.png" alt="user_img" style="width: 35px;">
+        <div class="ms-3">
+          <h5 class="mb-0 fw-bold">{{ title }}</h5>
+          <div style="font-size: 0.75rem;">
+            <router-link 
+              class="text-secondary nickname" 
+              :to="{ name: 'profile', params: { nickname: `${nickname}` }}"
+            >
+              @{{ nickname }}
+            </router-link>
+            <span class="mx-3 text-primary"><v-icon small color="primary">mdi-chart-bar</v-icon> {{ stock }}</span>
+          </div>
         </div>
       </div>
       <div>
-        <v-btn icon large v-if="isscrap" @click="cancelScrapArticle" color="yellow"><v-icon color="yellow">mdi-bookmark</v-icon></v-btn>
-        <v-btn icon large v-else @click="scrapArticle"><v-icon>mdi-bookmark-outline</v-icon></v-btn>
+        <v-btn icon v-if="isScrap" @click="cancelScrapArticle" color="yellow"><v-icon color="yellow">mdi-bookmark</v-icon></v-btn>
+        <v-btn icon v-else @click="scrapArticle"><v-icon>mdi-bookmark-outline</v-icon></v-btn>
       </div>
     </div>
-    <div v-html="data.content" class="mb-5"></div>
+    <!-- content & tags -->
+    <div v-html="content" @click="moveToDetail" style="cursor: pointer;"></div>
+    <div class="mb-1">
+      <v-chip v-for="(tag, idx) in tags" :key="idx" label class="px-2 me-2 mb-2">#{{ tag }}</v-chip>
+    </div>
+    <!-- Btn Group -->
     <div class="d-flex justify-content-between">
       <div>
-        <v-btn icon large v-if="islike" @click="cancelLikeArticle" color="error"><v-icon color="error">mdi-heart</v-icon></v-btn>
-        <v-btn icon large v-else @click="likeArticle"><v-icon>mdi-heart-outline</v-icon></v-btn>
-        <span>{{ likes }}</span>
+        <v-btn icon v-if="isLike" @click="cancelLikeArticle" color="error"><v-icon color="error">mdi-heart</v-icon></v-btn>
+        <v-btn icon v-else @click="likeArticle"><v-icon>mdi-heart-outline</v-icon></v-btn>
+        <span style="font-size: 0.85rem;">{{ likes }}</span>
       </div>
-      <div>
-        <v-btn icon large @click="drawComments"><v-icon>mdi-comment-multiple-outline</v-icon></v-btn>
-      </div>
-      <v-btn icon large><v-icon>mdi-share-variant-outline</v-icon></v-btn>
+      <v-btn icon @click="commentDrawer = !commentDrawer"><v-icon>mdi-comment-multiple-outline</v-icon></v-btn>
+      <v-btn icon><v-icon>mdi-share-variant-outline</v-icon></v-btn>
     </div>
-    <Comments v-if="commentDrawer" :data="commentData"/>
+    <Comments v-if="commentDrawer" :boardIdx="boardIdx"/>
   </v-sheet>
 </template>
 
 <script>
+import axios from 'axios'
 import Comments from '@/components/comment/Comments'
 
 export default {
@@ -44,98 +56,92 @@ export default {
     Comments
   },
   props: {
-    data: {
+    feed: {
       type: Object
     }
   },
   data: function () {
     return {
-      islike: this.data.islike,
-      isscrap: this.data.isscrap,
-      likes: this.data.likes,
+      ...this.feed,
       commentDrawer: false,
-      commentData: [],
+      elevation: 4,
     }
   },
   methods: {
     likeArticle: function () {
-      this.islike = !this.islike
+      this.isLike = !this.isLike
       this.likes += 1
-      // axios 요청
+      const data = {
+        boardIdx: this.boardIdx,
+        userIdx: this.$store.state.user_info.id
+      }
+      axios({
+        method: 'POST',
+        url: '/api/sns/favor',
+        data: data
+      })
     },
     cancelLikeArticle: function () {
-      this.islike = !this.islike
+      this.isLike = !this.isLike
       this.likes -= 1
-      // axios 요청
+      axios({
+        method: 'DELETE',
+        url: `/api/sns/favor/${this.$store.state.user_info.id}/${this.boardIdx}`
+      })
     },
     scrapArticle: function () {
-      this.isscrap = !this.isscrap
-      // axios 요청
+      this.isScrap = !this.isScrap
+      const data = {
+        boardIdx: this.boardIdx,
+        userIdx: this.$store.state.user_info.id
+      }
+      axios({
+        method: 'POST',
+        url: '/api/sns/scrap',
+        data: data
+      })
     },
     cancelScrapArticle: function () {
-      this.isscrap = !this.isscrap
-      // axios 요청
+      this.isScrap = !this.isScrap
+      axios({
+        method: 'DELETE',
+        url: `/api/sns/scrap/${this.$store.state.user_info.id}/${this.boardIdx}`
+      })
     },
-    drawComments: function () {
-      if (this.commentDrawer) {
-        this.commentData = []
-      } else {
-        // axios 요청
-        // .then
-        const data = {
-          "comment" :[
-            {
-            "comment_idx" : 1,
-            "content":"댓글 내용입니다",
-            "user_idx" : 1,
-            "nickName" : "이규빈"
-            },
-            {
-            "comment_idx" : 2,
-            "content":"댓글 내용입니다",
-            "user_idx" : 1,
-            "nickName" : "이규빈"
-            },
-            {
-            "comment_idx" : 3,
-            "content":"댓글 내용입니다",
-            "user_idx" : 1,
-            "nickName" : "이규빈"
-            },
-          ]
-        }
-        this.commentData = data.comment
-      }
-      this.commentDrawer = !this.commentDrawer
-    }
+    moveToDetail: function () {
+      axios({
+        method: 'GET',
+        url: `/api/article/${this.boardIdx}/${this.userIdx}`
+      })
+      .then(res => {
+        this.$store.state.selectedArticle = res.data.feed
+        this.$router.push({ name: 'articleDetail', params: { userIdx: res.data.feed.userIdx ,boardIdx: this.boardIdx }})
+      })
+    },
   }
 }
 </script>
 
 <style>
-#articleFeed {
-  padding-top: 1rem;
-  padding-bottom: 0.5rem;
+.articleFeed {
+  padding: 1rem 0rem;
+  transition: 0.5s;
+  font-family: 'Noto Sans KR', sans-serif;
 }
 
-#articleFeed h6 {
-  font-family: 'Nanum Gothic', sans-serif;
-  font-weight: 800
+.articleFeed > * {
+  margin: 0% 8%;
 }
 
-#articleFeed p {
-  font-family: 'Nanum Gothic', sans-serif;
-  font-weight: 400;
+.articleFeed > div:first-child {
+  margin: 0rem 1rem;
 }
 
-#articleFeed > * {
-  padding-left: 8%;
-  padding-right: 8%;
+.nickname {
+  text-decoration: none;
 }
 
-#articleFeed > div:first-child {
-  padding-left: 1rem;
-  padding-right: 1rem;
+.nickname:hover {
+  text-decoration: underline;
 }
-
 </style>

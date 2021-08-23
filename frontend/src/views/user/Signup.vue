@@ -16,6 +16,7 @@
             :counter="10"
             label="Name"
             required
+            @input="name_checked = false"
           >
           </v-text-field>
           <v-btn
@@ -33,6 +34,7 @@
             :rules="emailRules"
             label="E-mail"
             required
+            @input="email_checked = false"
           ></v-text-field>
           <v-btn
           :disabled="!email_exist"
@@ -61,11 +63,14 @@
         ></v-text-field>
 
         <!-- 관심 키워드 입력 -->
-        <v-text-field
-          v-model="keyword"
-          label="Hash Tag"
-          @keypress.enter="add_keyword"
-        ></v-text-field>
+        <div class="d-flex align-items-center w-100">
+          <v-text-field
+            v-model="keyword"
+            label="Hash Tag"
+            @keypress.enter="add_keyword"
+          ></v-text-field>
+          <v-btn color="primary" class="ms-5" @click="add_keyword">추가</v-btn>
+        </div>
         
         <!-- 선택된 키워드 or default -->
         <div id="keyword_items">
@@ -166,12 +171,13 @@ export default {
     name_check: function () {
       axios({
         method: 'GET',
-        url: `/user/nickname/${this.credentials.name}`
+        url: `/api/user/nickname/${this.credentials.name}`
       })
       .then(res => {
         const message = res.data.message
         if (message === "success") {
           this.name_checked = true
+          this.name_exist = false
           console.log('ok')
         } else {
           alert('이미 존재하는 닉네임입니다.')
@@ -186,7 +192,7 @@ export default {
     email_check: function () {
       axios({
         method: 'GET',
-        url: `/user/email/${this.credentials.email}`
+        url: `/api/user/email/${this.credentials.email}`
       })
       .then(res => {
         const message = res.data.message
@@ -218,7 +224,7 @@ export default {
       // axios 요청
       axios({
         method: 'POST',
-        url: '/user/signup',
+        url: '/api/user/signup',
         data: data
       })
       .then(res => {
@@ -307,13 +313,13 @@ font-family: 'Noto Sans KR', sans-serif;
 
 #nickNameInput > button {
   position: absolute;
-  right: 5%;
+  right: 0;
   top: 20%;
 }
 
 #emailInput > button {
   position: absolute;
-  right: 5%;
+  right: 0;
   top: 20%;
 }
 
@@ -327,28 +333,14 @@ font-family: 'Noto Sans KR', sans-serif;
 
 .checkBtn {
   position: absolute;
-  left: 97%;
+  left: 100%;
   top: 20%;
+  padding-left: 8px;
 }
 
 @media screen and (min-width: 500px){
   #btnGroup {
     justify-content: flex-end;
-  }
-}
-
-@media screen and (max-width: 599px){
-  #nickNameInput > button {
-    right: 0;
-  }
-
-  #emailInput > button {
-    right: 0;
-  }
-
-  .checkBtn {
-    left: 100%;
-    padding-left: 8px;
   }
 }
 </style>

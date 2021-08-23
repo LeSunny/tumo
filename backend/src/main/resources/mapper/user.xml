@@ -4,28 +4,53 @@
 
 <mapper namespace="com.tumo.model.dao.UserDao">
 
+	<insert id="createOauthUser"  parameterType="userdto">
+		insert into user (nickname, email, password, oauth, login_type)
+			values (#{nickname}, #{email}, #{password}, #{oauth}, #{loginType})
+	</insert>
+
 	<insert id="createUser"  parameterType="userdto">
 		insert into user (nickname, email, password, introduce)
 			values (#{nickname}, #{email}, #{password}, #{introduce})
 	</insert>
 	
+	<insert id="insertUserTemp" parameterType="map">
+		insert into user_temp (user_idx, code)
+			values (#{userIdx}, #{code})
+	</insert>
+	
+	<select id="findUserTempByUserIdx" parameterType="int" resultType="string">
+		select code
+			from user_temp
+			where user_idx = #{userIdx};
+	</select>
+	
+	<update id="updateUserLoginType" parameterType="int">
+		update user
+			set login_type = 'ROLE_USER'
+			where user_idx = #{userIdx};
+			
+		delete from user_temp
+			where user_idx = #{userIdx};
+	</update>
+	
 	<select id="findUserByEmail" parameterType="string" resultType="userdto">
 		select user_idx as userIdx, password, nickname, email, login_type as loginType, introduce, 
-				disclosure, create_at as createAt, update_at as updateAt, deleted 
+				disclosure, create_at as createAt, update_at as updateAt, deleted, oauth 
 			from user
 			having email = #{email} 
 	</select>
 	
 	<select id="findUserByNickname" parameterType="string" resultType="userdto">
 		select user_idx as userIdx, password, nickname, email, login_type as loginType, introduce, 
-				disclosure, create_at as createAt, update_at as updateAt, deleted 
+				disclosure, create_at as createAt, update_at as updateAt, deleted, oauth
 			from user
 			having nickname = #{nickname} 
 	</select>
 	
 	<select id="findUserByUserIdx" parameterType="int" resultType="userdto">
 		select user_idx as userIdx, password, nickname, email, login_type as loginType, introduce, 
-				disclosure, create_at as createAt, update_at as updateAt, deleted 
+				disclosure, create_at as createAt, update_at as updateAt, deleted, oauth
 			from user
 			having user_idx = #{userIdx} 
 	</select>
@@ -40,6 +65,11 @@
 			where user_idx = #{userIdx} and content = #{content}
 	</select>
 	
+	<select id="findUserTagByUserIdx" parameterType="int" resultType="string">
+		select content from user_tag
+			where user_idx = #{userIdx}
+	</select>
+	
 	<update id="updateUpdateAtByEmail" parameterType="string">
 		update user
 			set update_at = CURRENT_TIMESTAMP
@@ -52,10 +82,25 @@
 			where user_idx = #{userIdx}
 	</update>
 	
-	<update id="updateNicknameByUserIdx" parameterType="map">
+	<update id="updateUserByUserIdx" parameterType="updateuserdto">
+		<!-- nickname, introduce, disclosure 변경 -->
 		update user
-			set nickname = #{nickname}
-			where user_idx = #{userIdx}
+			set nickname = #{nickname}, introduce = #{introduce}, disclosure = #{disclosure}
+			where user_idx = #{userIdx};
+		
+		<!-- user_tag 테이블 전부 삭제후 다시 삽입 -->
+		delete from user_tag
+			where user_idx = #{userIdx};
+		<if test="tags.size != 0">
+	        insert into user_tag (user_idx, content)
+	        	values
+	        <foreach collection="tags" item="content" separator=",">
+	        (
+	            #{userIdx},
+	            #{content}
+	        )
+	        </foreach>
+    	</if>
 	</update>
 	
 	<delete id="deleteUserByUserIdx" parameterType="int">

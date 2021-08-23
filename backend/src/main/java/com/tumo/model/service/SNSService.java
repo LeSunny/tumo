@@ -4,46 +4,50 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.tumo.model.FavorScrapDto;
 import com.tumo.model.FeedDto;
 import com.tumo.model.FeedLikeDto;
+import com.tumo.model.FollowDto;
+import com.tumo.model.NotificationDto;
 import com.tumo.model.ProfileDto;
 import com.tumo.model.ScrapDto;
-import com.tumo.model.UserDto;
 
 public interface SNSService {
 
-	boolean createScrap(HashMap<String, Integer> info);
+	boolean createScrap(FavorScrapDto info);
 
 	List<ScrapDto> readScrapList(int userIdx);
 
-	boolean deleteScrap(HashMap<String, Integer> info);
+	boolean deleteScrap(FavorScrapDto param);
 
-	boolean createFavor(HashMap<String, Integer> info);
+	boolean createFavor(FavorScrapDto favorDto);
 
-	FeedLikeDto readIsLike(Map<String, Integer> param);
+	FeedLikeDto readIsLike(FavorScrapDto param);
 
-	boolean deleteFavor(HashMap<String, Integer> info);
+	boolean deleteFavor(FavorScrapDto param);
 
 	List<FeedDto> readMyPost(int userIdx);
 
-	List<UserDto> searchUser(String searchContent, int pageNum);
+	List<Map<String, Object>> searchUser(String searchContent, int pageNum);
 
-	ProfileDto readUser(int userIdx);
+	HashMap<String, Object> readUser(String nickname);
 
 	List<ProfileDto> readFollowerList(int userIdx);
 
 	List<ProfileDto> readFollowingList(int userIdx);
 
-	Boolean readIsFollow(Map<String, Object> param);
+	Boolean readIsFollow(FollowDto followDto);
 
-	void updateDisclosure(int userIdx);
+	void deleteFollowing(FollowDto followDto);
 
-	void deleteFollowing(Map<String, Object> param);
+	String createFollowRequest(FollowDto followDto);
 
-	String createFollowRequest(HashMap<String, Integer> info);
+	String createFollowing(FollowDto followDto);
 
-	String createFollowing(HashMap<String, Integer> info);
+	void deleteFollowingRequest(Map<String, Object> param);
 
-	void deleteFollowingRequest(HashMap<String, Integer> param);
+	List<NotificationDto> readAlarmList(int userIdx);
+
+	void updateAlarm(int notificationIdx);
 
 }

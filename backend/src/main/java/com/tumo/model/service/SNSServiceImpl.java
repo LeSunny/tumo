@@ -9,12 +9,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.tumo.model.FavorScrapDto;
 import com.tumo.model.FeedDto;
 import com.tumo.model.FeedLikeDto;
+import com.tumo.model.FollowDto;
+import com.tumo.model.NotificationDto;
 import com.tumo.model.ProfileDto;
 import com.tumo.model.ScrapDto;
-import com.tumo.model.UserDto;
+import com.tumo.model.dao.FeedDao;
 import com.tumo.model.dao.SNSDao;
+import com.tumo.model.dao.UserDao;
 
 @Service
 public class SNSServiceImpl implements SNSService {
@@ -23,8 +27,18 @@ public class SNSServiceImpl implements SNSService {
 	private SqlSession sqlSession;
 
 	@Override
-	public boolean createScrap(HashMap<String, Integer> info) {
+	@Transactional
+	public boolean createScrap(FavorScrapDto info) {
+		if (sqlSession.getMapper(SNSDao.class).readIsScrap(info) != null)
+			return false;
 		sqlSession.getMapper(SNSDao.class).createScrap(info);
+
+		Map<String, Object> param = new HashMap<String, Object>();
+		param.put("userIdx", sqlSession.getMapper(FeedDao.class).readArticle(info.getBoardIdx()).getUserIdx());
+		param.put("otheruserIdx", info.getUserIdx());
+		param.put("type", 4);
+		param.put("boardIdx", info.getBoardIdx());
+		sqlSession.getMapper(SNSDao.class).createNotification(param);
 		return true;
 	}
 
@@ -34,28 +48,47 @@ public class SNSServiceImpl implements SNSService {
 	}
 
 	@Override
-	public boolean deleteScrap(HashMap<String, Integer> info) {
+	@Transactional
+	public boolean deleteScrap(FavorScrapDto info) {
+		if (sqlSession.getMapper(SNSDao.class).readIsScrap(info) == null)
+			return false;
 		sqlSession.getMapper(SNSDao.class).deleteScrap(info);
 		return true;
 	}
 
 	@Override
 	@Transactional
-	public boolean createFavor(HashMap<String, Integer> info) {
-		sqlSession.getMapper(SNSDao.class).addFavor(info.get("boardIdx"));
+	public boolean createFavor(FavorScrapDto info) {
+		boolean isLike = readIsLike(info) == null ? false : true;
+		if (isLike)
+			return false;
+
+		sqlSession.getMapper(SNSDao.class).addFavor(info.getBoardIdx());
 		sqlSession.getMapper(SNSDao.class).createFavor(info);
+
+		Map<String, Object> param = new HashMap<String, Object>();
+		param.put("userIdx", sqlSession.getMapper(FeedDao.class).readArticle(info.getBoardIdx()).getUserIdx());
+		param.put("otheruserIdx", info.getUserIdx());
+		param.put("type", 2);
+		param.put("boardIdx", info.getBoardIdx());
+		sqlSession.getMapper(SNSDao.class).createNotification(param);
+
 		return true;
 	}
 
 	@Override
-	public FeedLikeDto readIsLike(Map<String, Integer> param) {
+	public FeedLikeDto readIsLike(FavorScrapDto param) {
 		return sqlSession.getMapper(SNSDao.class).readIsLike(param);
 	}
 
 	@Override
 	@Transactional
-	public boolean deleteFavor(HashMap<String, Integer> info) {
-		sqlSession.getMapper(SNSDao.class).subFavor(info.get("boardIdx"));
+	public boolean deleteFavor(FavorScrapDto info) {
+		boolean isLike = readIsLike(info) == null ? false : true;
+		if (!isLike)
+			return false;
+
+		sqlSession.getMapper(SNSDao.class).subFavor(info.getBoardIdx());
 		sqlSession.getMapper(SNSDao.class).deleteFavor(info);
 		return true;
 	}
@@ -66,14 +99,14 @@ public class SNSServiceImpl implements SNSService {
 	}
 
 	@Override
-	public List<UserDto> searchUser(String searchContent, int pageNum) {
-		searchContent = searchContent.replaceAll("\\+", " ");
+	@Transactional
+	public List<Map<String, Object>> searchUser(String searchContent, int pageNum) {
 		Map<String, Object> param = new HashMap<String, Object>();
+		searchContent = searchContent.trim();
 		param.put("searchContent", searchContent);
 		param.put("pageNum", pageNum * 5);
 		int cnt = sqlSession.getMapper(SNSDao.class).countSearchedUser(param);
 
-		System.out.println("searchContent = " + param.get("searchContent"));
 		if (cnt == 0)
 			return null;
 
@@ -81,17 +114,29 @@ public class SNSServiceImpl implements SNSService {
 	}
 
 	@Override
-	public ProfileDto readUser(int userIdx) {
-		ProfileDto result = sqlSession.getMapper(SNSDao.class).readUser(userIdx);
-
-		if (result == null)
+	@Transactional
+	public HashMap<String, Object> readUser(String nickname) {
+		int userIdx = sqlSession.getMapper(UserDao.class).findUserByNickname(nickname).getUserIdx();
+		ProfileDto profileDto = sqlSession.getMapper(SNSDao.class).readUser(userIdx);
+		if (profileDto == null)
 			return null;
 
 		Integer followingCnt = sqlSession.getMapper(SNSDao.class).getFollowingCount(userIdx);
 		Integer followerCnt = sqlSession.getMapper(SNSDao.class).getFollowerCount(userIdx);
 
-		result.setFollowingCnt(followingCnt == null ? 0 : followingCnt);
-		result.setFollowerCnt(followerCnt == null ? 0 : followerCnt);
+		profileDto.setFollowingCnt(followingCnt == null ? 0 : followingCnt);
+		profileDto.setFollowerCnt(followerCnt == null ? 0 : followerCnt);
+
+		List<String> tags = sqlSession.getMapper(UserDao.class).findUserTagByUserIdx(userIdx);
+
+		HashMap<String, Object> result = new HashMap<String, Object>();
+		result.put("userIdx", profileDto.getUserIdx());
+		result.put("nickname", profileDto.getNickname());
+		result.put("introduce", profileDto.getIntroduce());
+		result.put("followingCnt", profileDto.getFollowingCnt());
+		result.put("followerCnt", profileDto.getFollowerCnt());
+		result.put("disclosure", profileDto.getDisclosure());
+		result.put("tags", tags);
 
 		return result;
 	}
@@ -107,9 +152,9 @@ public class SNSServiceImpl implements SNSService {
 	}
 
 	@Override
-	public Boolean readIsFollow(Map<String, Object> param) {
-		Map<String, Integer> follow = sqlSession.getMapper(SNSDao.class).readIsFollow(param);
-		
+	public Boolean readIsFollow(FollowDto followDto) {
+		FollowDto follow = sqlSession.getMapper(SNSDao.class).readIsFollow(followDto);
+
 		if (follow == null)
 			return false;
 
@@ -117,45 +162,58 @@ public class SNSServiceImpl implements SNSService {
 	}
 
 	@Override
-	public void updateDisclosure(int userIdx) {
-		sqlSession.getMapper(SNSDao.class).updateDisclosure(userIdx);
-	}
-
-	@Override
-	public void deleteFollowing(Map<String, Object> param) {
-		sqlSession.getMapper(SNSDao.class).deleteFollowing(param);
+	public void deleteFollowing(FollowDto followDto) {
+		sqlSession.getMapper(SNSDao.class).deleteFollowing(followDto);
 	}
 
 	@Override
 	@Transactional
-	public String createFollowRequest(HashMap<String, Integer> info) {
-		ProfileDto result = sqlSession.getMapper(SNSDao.class).readUser(info.get("otherIdx"));
+	public String createFollowRequest(FollowDto followDto) {
+		ProfileDto result = sqlSession.getMapper(SNSDao.class).readUser(followDto.getFollowingIdx());
 		String disclosure = result.getDisclosure();
-		
-		if(disclosure.equals("public")) {
-			sqlSession.getMapper(SNSDao.class).createFollowing(info);
+
+		if (disclosure.equals("public")) {
+			sqlSession.getMapper(SNSDao.class).createFollowing(followDto);
 			return "Follow";
 		} else {
-			sqlSession.getMapper(SNSDao.class).notifyFollowRequest(info);
+			Map<String, Object> param = new HashMap<String, Object>();
+			param.put("userIdx", followDto.getFollowingIdx());
+			param.put("otheruserIdx", followDto.getUserIdx());
+			param.put("type", 1);
+			param.put("boardIdx", -1);
+
+			sqlSession.getMapper(SNSDao.class).createNotification(param);
 			return "Wait";
 		}
 	}
 
-	
 	@Override
 	@Transactional
-	public String createFollowing(HashMap<String, Integer> info) {
-		sqlSession.getMapper(SNSDao.class).createFollowing(info);
-		sqlSession.getMapper(SNSDao.class).deleteNotifiedFollowRequest(info);
+	public String createFollowing(FollowDto followDto) {
+		sqlSession.getMapper(SNSDao.class).createFollowing(followDto);
+
+		Map<String, Object> param = new HashMap<String, Object>();
+		param.put("userIdx", followDto.getFollowingIdx());
+		param.put("otheruserIdx", followDto.getUserIdx());
+		sqlSession.getMapper(SNSDao.class).deleteNotifiedFollowRequest(param);
 		return "Follow";
 	}
 
 	@Override
-	public void deleteFollowingRequest(HashMap<String, Integer> param) {
-		HashMap<String, Integer> info = new HashMap<String, Integer>();
-		info.put("userIdx", param.get("otherIdx"));
-		info.put("otherIdx", param.get("userIdx"));
-		sqlSession.getMapper(SNSDao.class).deleteNotifiedFollowRequest(info);
+	public void deleteFollowingRequest(Map<String, Object> param) {
+		sqlSession.getMapper(SNSDao.class).deleteNotifiedFollowRequest(param);
+	}
+
+	@Override
+	public List<NotificationDto> readAlarmList(int userIdx) {
+		List<NotificationDto> notificationList = sqlSession.getMapper(SNSDao.class).readAlarmList(userIdx);
+
+		return notificationList;
+	}
+
+	@Override
+	public void updateAlarm(int notificationIdx) {
+		sqlSession.getMapper(SNSDao.class).updateAlarm(notificationIdx);
 	}
 
 }
